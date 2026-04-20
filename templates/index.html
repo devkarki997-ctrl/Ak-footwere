@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AK Footwear | POS</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #0f0f0f; color: white; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        .left-panel { width: 300px; background: #1a1a1a; padding: 20px; border-right: 1px solid #333; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
+        .alert-box { background: rgba(255, 118, 117, 0.1); border: 1px solid #e74c3c; border-radius: 8px; padding: 12px; }
+        .alert-item { font-size: 0.8em; color: #ff7675; margin-bottom: 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding-bottom: 5px; }
+        .sidebar { position: fixed; right: -360px; top: 0; width: 320px; height: 100%; background: #1a1a1a; padding: 20px; border-left: 1px solid #333; transition: 0.3s ease; z-index: 1001; overflow-y: auto; }
+        .sidebar.active { right: 0; }
+        .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; }
+        .overlay.active { display: block; }
+        .main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .top-nav { display: flex; align-items: center; justify-content: space-between; padding: 15px 30px; background: #111; border-bottom: 1px solid #333; }
+        .search-bar { background: #222; border: 1px solid #444; color: white; padding: 10px 20px; border-radius: 25px; width: 250px; outline: none; }
+        .main-content { flex: 1; padding: 30px; overflow-y: auto; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
+        .shoe-card { background: #1a1a1a; padding: 15px; border-radius: 12px; border: 1px solid #333; text-align: center; transition: 0.3s; position: relative; }
+        .shoe-img { width: 100%; height: 150px; object-fit: cover; border-radius: 8px; margin-bottom: 10px; }
+        .manager-form input { background: #222; border: 1px solid #444; color: white; padding: 10px; border-radius: 6px; width: 100%; box-sizing: border-box; margin-bottom: 10px; }
+        .add-btn { background: #3498db; color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; }
+        .info-box { margin-top: 10px; padding: 12px; background: #222; border-radius: 8px; display: none; text-align: left; font-size: 0.9em; }
+        .color-bubble { display: inline-block; padding: 5px 10px; margin: 3px; border-radius: 15px; background: #333; cursor: pointer; border: 1px solid #444; font-size: 0.8em; }
+        .mini-item { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 10px; border-radius: 6px; margin-bottom: 8px; font-size: 0.8em; }
+        /* ALERT CLASSES */
+        .low-stock-card { border: 2px solid #ff7675 !important; }
+        .text-low { color: #ff7675 !important; font-weight: bold; }
+        .text-ok { color: #2ecc71 !important; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="overlay" id="overlay" onclick="toggleMenu()"></div>
+
+    <div class="left-panel">
+        <h2 style="color: #3498db; margin: 0;">AK Footwear</h2>
+        <h4>Add New Stock</h4>
+        <form class="manager-form" action="/add_shoe" method="post" enctype="multipart/form-data">
+            <input type="text" name="name" placeholder="Shoe Name" required>
+            <input type="text" name="color" placeholder="Color" required>
+            <input type="number" name="price" placeholder="Price" required>
+            <input type="number" name="stock" placeholder="Stock" required>
+            <input type="file" name="image" accept="image/*" style="font-size: 0.7em;">
+            <button type="submit" class="add-btn">Save to Shop</button>
+        </form>
+
+        <hr style="border: 0; border-top: 1px solid #333; margin: 10px 0;">
+
+        <h4 style="color: #e74c3c; margin-bottom: 10px;">⚠️ Reorder Alerts (≤24)</h4>
+        <div class="alert-box">
+            {% set count = namespace(found=0) %}
+            {% for item in all_inventory %}
+                {% if item.stock|int <= 24 %}
+                    <div class="alert-item">
+                        <strong>{{ item.shoe_name }}</strong><br>
+                        {{ item.color }}: <span class="text-low">{{ item.stock }} left</span>
+                    </div>
+                    {% set count.found = count.found + 1 %}
+                {% endif %}
+            {% endfor %}
+            {% if count.found == 0 %}
+                <p style="font-size: 0.75em; color: #888; text-align: center;">Stock is healthy.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="main-area">
+        <div class="top-nav">
+            <h2 style="margin: 0; font-size: 1.2em;">Shop Floor</h2>
+            <input type="text" id="searchInput" class="search-bar" placeholder="Search shoes..." onkeyup="searchShoes()">
+            <div style="display: flex; gap: 15px; align-items: center;">
+                <a href="/history" style="color: #888; text-decoration: none; font-size: 0.9em; border: 1px solid #333; padding: 5px 15px; border-radius: 20px;">📜 History</a>
+                <button onclick="toggleMenu()" style="background:none; border:none; color:white; font-size: 24px; cursor:pointer;">☰</button>
+            </div>
+        </div>
+        <div class="main-content">
+            <div class="grid" id="shoeGrid">
+                {% for item in items %}
+                <div class="shoe-card" id="card-{{ loop.index }}">
+                    <img src="/static/uploads/{{ item.image }}" class="shoe-img">
+                    <h3 class="shoe-title">{{ item.shoe_name }}</h3>
+                    <div id="btn-container-{{ loop.index }}">
+                        <button onclick="fetchColors('{{ item.shoe_name }}', '{{ loop.index }}')" style="background:none; border:1px solid #3498db; color:#3498db; padding:5px; border-radius:4px; cursor:pointer;">Select Variant</button>
+                    </div>
+                    <div id="display-{{ loop.index }}" class="info-box">
+                        <p><strong>Color:</strong> <span id="name-{{ loop.index }}"></span></p>
+                        <p><strong>Price:</strong> <span id="price-{{ loop.index }}" style="color:#2ecc71;"></span></p>
+                        <p><strong>Stock:</strong> <span id="stock-{{ loop.index }}"></span></p>
+                        <hr style="border:0; border-top:1px solid #444; margin:8px 0;">
+                        <input type="text" id="cust-{{ loop.index }}" placeholder="Customer Name" style="width:100%; margin-bottom:5px; background:#111; color:white; border:1px solid #444; padding:5px;">
+                        <input type="number" id="qty-{{ loop.index }}" value="1" min="1" style="width:100%; margin-bottom:5px; background:#111; color:white; border:1px solid #444; padding:5px;">
+                        <button class="add-btn" style="background:#27ae60;" onclick="sellItem('{{ item.shoe_name }}', '{{ loop.index }}')">Confirm Sale</button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="sidebar" id="sidebar">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3 style="margin: 0;">Settings</h3>
+            <button onclick="toggleMenu()" style="background:none; border:none; color:#888; font-size:20px; cursor:pointer;">✕</button>
+        </div>
+        <h4>Full Inventory</h4>
+        {% for item in all_inventory %}
+        <div class="mini-item">
+            <span>{{ item.shoe_name }} ({{ item.color }})</span>
+            <span class="{% if item.stock|int <= 24 %}text-low{% else %}text-ok{% endif %}">{{ item.stock }}</span>
+            <a href="/delete_item/{{ item.id }}" style="color: #e74c3c; text-decoration: none;" onclick="return confirm('Delete?')">Del</a>
+        </div>
+        {% endfor %}
+        <hr style="border: 0; border-top: 1px solid #333; margin: 20px 0;">
+        <div style="background: #222; padding: 15px; border-radius: 8px;">
+            <h4 style="margin-top: 0; color: #f1c40f;">🔐 Security</h4>
+            <form action="/update_creds" method="post">
+                <input type="password" name="current_password" placeholder="Current Password" required style="width:100%; margin-bottom:10px; background:#111; color:white; border:1px solid #444; padding:8px; border-radius:4px;">
+                <input type="text" name="new_username" placeholder="New Username" required style="width:100%; margin-bottom:5px; background:#111; color:white; border:1px solid #444; padding:8px; border-radius:4px;">
+                <input type="password" name="new_password" placeholder="New Password" required style="width:100%; margin-bottom:10px; background:#111; color:white; border:1px solid #444; padding:8px; border-radius:4px;">
+                <button type="submit" style="background:#e67e22; color:white; border:none; padding:10px; border-radius:5px; width:100%; cursor:pointer;">Update</button>
+            </form>
+        </div>
+        <br>
+        <a href="/logout" style="color: #e74c3c; text-decoration: none; display: block; padding: 10px; border: 1px solid #e74c3c; text-align: center; border-radius: 5px;">Logout</a>
+    </div>
+
+    <script>
+        function toggleMenu() { document.getElementById('sidebar').classList.toggle('active'); document.getElementById('overlay').classList.toggle('active'); }
+        function searchShoes() {
+            let filter = document.getElementById('searchInput').value.toLowerCase();
+            let cards = document.getElementsByClassName('shoe-card');
+            for (let i = 0; i < cards.length; i++) {
+                let title = cards[i].querySelector('.shoe-title').innerText.toLowerCase();
+                cards[i].style.display = title.includes(filter) ? "" : "none";
+            }
+        }
+        function fetchColors(name, id) {
+            fetch('/get_colors/' + name).then(res => res.json()).then(data => {
+                const container = document.getElementById('btn-container-' + id);
+                container.innerHTML = '';
+                data.forEach(v => {
+                    let span = document.createElement('span');
+                    span.className = 'color-bubble';
+                    span.innerText = v.color;
+                    span.onclick = () => {
+                        const display = document.getElementById('display-' + id);
+                        const card = document.getElementById('card-' + id);
+                        const stockText = document.getElementById('stock-' + id);
+                        display.style.display = 'block';
+                        document.getElementById('name-' + id).innerText = v.color;
+                        document.getElementById('price-' + id).innerText = '$' + v.price;
+                        stockText.innerText = v.stock;
+                        if (parseInt(v.stock) <= 24) {
+                            card.classList.add('low-stock-card');
+                            stockText.className = 'text-low';
+                        } else {
+                            card.classList.remove('low-stock-card');
+                            stockText.className = 'text-ok';
+                        }
+                    };
+                    container.appendChild(span);
+                });
+            });
+        }
+        function sellItem(name, id) {
+            const color = document.getElementById('name-' + id).innerText;
+            const cust = document.getElementById('cust-' + id).value;
+            const qty = document.getElementById('qty-' + id).value;
+            if(!cust || !qty) { alert("Fill in details!"); return; }
+            fetch('/place_order', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({shoe_name: name, color: color, customer_name: cust, customer_phone: 'NA', qty: qty})
+            }).then(() => location.reload());
+        }
+    </script>
+</body>
+</html>
